@@ -1,3 +1,23 @@
+"""
+## UG-Ripper
+
+# Author: MonJhod
+# GitHub: https://github.com/MonJhod
+# License: MIT
+# Last Modified: 2024-08-19
+
+`ug-ripper.py` is a web scraper designed to automate the process of downloading guitar 
+tabs from Ultimate Guitar. It uses Selenium for web automation and BeautifulSoup for 
+parsing HTML content. The program logs into Ultimate Guitar using user-provided credentials, 
+navigates to a specified playlist, and downloads the guitar tabs as PDF files using pdfkit. 
+The download location and other configurations are specified in a configuration file 
+`config.ini`. The program handles login failures and timeouts gracefully, logging any 
+errors encountered during the scraping process.
+
+# Example Usage:
+    python ug-ripper.py
+"""
+
 import configparser
 import getpass
 import logging
@@ -28,30 +48,61 @@ pdfkitConfig = pdfkit.configuration(wkhtmltopdf=config.get('PDFKit', 'executable
 # List to keep track of failed downloads
 failed_songs = []
 
-# Function to prompt for credentials
 def get_credentials():
+    """
+    Gets the user's login credentials for Ultimate Guitar.
+    
+    Returns:
+        tuple: A tuple containing the username and password entered by the user.
+    """
+        
     username = input("Enter your username: ")
     password = getpass.getpass("Enter your password: ")
     return username, password
 
-# Function to set up WebDriver with download location
 def setup_webdriver(download_location):
+    """
+    Sets up a Firefox WebDriver instance with the specified download location and other configuration options.
+    
+    Args:
+        download_location (str): The path to the directory where downloaded files should be saved.
+    
+    Returns:
+        webdriver.Firefox: A configured Firefox WebDriver instance.
+    """
+        
     profile = webdriver.FirefoxProfile()
+    # Set the download folder list to 2, which means a custom location specified by the user
     profile.set_preference("browser.download.folderList", 2)
+    # Disable showing the download manager when a download starts
     profile.set_preference("browser.download.manager.showWhenStarting", False)
+    # Set the download directory to the absolute path of the specified download location
     profile.set_preference("browser.download.dir", os.path.abspath(download_location))
+    # Automatically download files of type 'application/pdf' without asking
     profile.set_preference("browser.helperApps.neverAsk.saveToDisk", "application/pdf")
     
     options = webdriver.FirefoxOptions()
     options.profile = profile
+    # Add the headless argument to run Firefox in headless mode (without a GUI)
     options.add_argument("--headless")
+    # Disable automatic downloads
     options.enable_downloads = False
     
     driver = webdriver.Firefox(options=options)
     return driver
 
-# Function to log in to Ultimate Guitar
 def login(username, password):
+    """
+    Logs in to the Ultimate Guitar website using the provided username and password.
+    
+    Args:
+        username (str): The username to use for login.
+        password (str): The password to use for login.
+    
+    Returns:
+        webdriver.Firefox: The Firefox WebDriver instance if the login is successful, otherwise None.
+    """
+        
     login_url = config.get('URLs', 'login_url')
     driver = setup_webdriver(download_location)
     driver.get(login_url)
@@ -67,6 +118,7 @@ def login(username, password):
         password_field.send_keys(password)
         password_field.send_keys(Keys.RETURN)
         
+        # This is a cookie that is created after a successful login
         WebDriverWait(driver, 5).until(lambda d: d.get_cookie('bbusername') is not None)
         
         if driver.get_cookie('bbusername') is None:
@@ -81,8 +133,19 @@ def login(username, password):
         driver.quit()
         return None
 
-# Function to parse song links from the playlist page
 def parse_song_links(driver):
+    """
+    Parses song links from the playlist URL using the provided WebDriver.
+
+    Args:
+        driver (selenium.webdriver.remote.webdriver.WebDriver): The WebDriver instance used to navigate and fetch the page source.
+
+    Returns:
+        list: A list of song URLs found on the playlist page.
+
+    Raises:
+        TimeoutException: If the page does not load within the specified timeout period.
+    """
     playlist_url = config.get('URLs', 'playlist_url')
     driver.get(playlist_url)
     
@@ -97,6 +160,20 @@ def parse_song_links(driver):
         return []
 
 def download_pdf(driver, song_url):
+    """
+    Downloads the song from the given URL and saves it as a PDF.
+
+    Args:
+        driver (selenium.webdriver): The Selenium WebDriver instance.
+        song_url (str): The URL of the song to be downloaded.
+
+    Returns:
+        None
+
+    Raises:
+        TimeoutException: If the page takes too long to load.
+        NoSuchElementException: If the required elements are not found on the page.
+    """
     driver.get(song_url)
     
     try:
@@ -120,8 +197,16 @@ def download_pdf(driver, song_url):
         logging.error(str(e))
         failed_songs.append(song_url)
         
-# Function to fetch and save song data
 def fetch_songs(driver):
+    """
+    Fetches and processes songs from the playlist URL using the provided WebDriver.
+
+    Args:
+        driver (selenium.webdriver.remote.webdriver.WebDriver): The WebDriver instance used to navigate and fetch the page source.
+
+    Returns:
+        None
+    """
     song_urls = parse_song_links(driver)
     
     total_songs = len(song_urls)
