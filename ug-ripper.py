@@ -48,6 +48,29 @@ pdfkitConfig = pdfkit.configuration(wkhtmltopdf=config.get('PDFKit', 'executable
 # List to keep track of failed downloads
 failed_songs = []
 
+
+def validate_config(config):
+    """
+    Validates the given configuration object to ensure all required sections and options are present.
+
+    Args:
+        config (ConfigParser): The configuration object to validate.
+
+    Raises:
+        ValueError: If a required section or option is missing from the configuration.
+    """
+    required_sections = {
+        'Download': ['location'],
+        'PDFKit': ['executable_path'],
+        'URLs': ['login_url', 'playlist_url']
+    }
+    for section, options in required_sections.items():
+        if not config.has_section(section):
+            raise ValueError(f"Missing required section: {section}")
+        for option in options:
+            if not config.has_option(section, option):
+                raise ValueError(f"Missing required option: {option} in section {section}")
+
 def get_credentials():
     """
     Gets the user's login credentials for Ultimate Guitar.
@@ -215,6 +238,7 @@ def fetch_songs(driver):
         download_pdf(driver, song_url)
 
 if __name__ == "__main__":
+    validate_config(config)
     while True:
         # Check if the config contains an Authentication section with Username and Password
         if config.has_section('Authentication') and config.has_option('Authentication', 'Username') and config.has_option('Authentication', 'Password'):
