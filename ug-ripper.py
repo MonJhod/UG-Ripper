@@ -22,6 +22,7 @@ import configparser
 import getpass
 import logging
 import os
+import time
 import pdfkit
 
 from bs4 import BeautifulSoup
@@ -203,11 +204,17 @@ def download_pdf(driver, song_url):
         # Wait for the page to load
         WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.XPATH, "/html/body/div[1]/div[3]/main/div[2]/article[1]/section[2]/article/div")))
         
+        # Sleep for a short time since the full songs were not loading
+        time.sleep(1)
+        
+        # Scroll to the bottom of the page to load the full content
+        driver.find_element(By.TAG_NAME, 'body').send_keys(Keys.END)
+        
         # Extract song title
         song_title_element = driver.find_element(By.XPATH, "/html/body/div[1]/div[3]/main/div[2]/article[1]/section[1]/header")
         song_title = song_title_element.text.strip().replace('/', '_')    
         # Download everything the content xpaths 
-        song_html = driver.find_element(By.XPATH, "/html/body/div[1]/div[3]/main/div[2]/article[1]/section[2]/article/div").get_attribute('outerHTML')
+        song_html = driver.find_element(By.XPATH, "/html/body/div[1]/div[3]/main/div[2]/article[1]/section[2]/article/div/section").get_attribute('innerHTML')
     
         # Concatenate song_title_element and song_html for the full download_html
         download_html = song_title_element.get_attribute('outerHTML') + song_html        
