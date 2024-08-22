@@ -45,6 +45,11 @@ download_location = config.get('Download', 'location', fallback='.')
 
 # Setup pdfkit config pointing to executable
 pdfkitConfig = pdfkit.configuration(wkhtmltopdf=config.get('PDFKit', 'executable_path'))
+# Setup pdfkit options to use UTF-8 encoding
+pdfkitOptions = {
+    'encoding': 'UTF-8',
+    'page-size': 'Letter'
+}
 
 # List to keep track of failed downloads
 failed_songs = []
@@ -219,7 +224,7 @@ def download_pdf(driver, song_url):
         # Concatenate song_title_element and song_html for the full download_html
         download_html = song_title_element.get_attribute('outerHTML') + song_html        
         # Convert HTML to PDF
-        pdfkit.from_string(download_html, f"{download_location}/{song_title}.pdf", configuration=pdfkitConfig)
+        pdfkit.from_string(download_html, f"{download_location}/{song_title}.pdf", configuration=pdfkitConfig, options=pdfkitOptions)
         
         logging.info(f"HTML downloaded for song: {song_title}")
     except (TimeoutException, NoSuchElementException) as e:
