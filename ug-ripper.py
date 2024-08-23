@@ -22,10 +22,16 @@ import configparser
 import getpass
 import logging
 import os
+import re
 import time
-import pdfkit
 
+import html2text
+import pdfkit
 from bs4 import BeautifulSoup
+from docx import Document
+from docx.enum.section import WD_SECTION
+from docx.enum.text import WD_LINE_SPACING
+from docx.shared import Inches, Pt, RGBColor
 from selenium import webdriver
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from selenium.webdriver.common.by import By
@@ -88,6 +94,32 @@ def get_credentials():
     username = input("Enter your username: ")
     password = getpass.getpass("Enter your password: ")
     return username, password
+
+def preprocess_html(html):
+    """
+    Preprocess the HTML content by removing class attributes, ensuring <pre> tags are not encapsulated by <code> tags, and formatting the HTML.
+
+    Args:
+        html (str): The HTML content to prettify.
+
+    Returns:
+        str: The prettified HTML content.
+    """
+    soup = BeautifulSoup(html, 'html.parser')
+
+    # Remove all class attributes
+    for tag in soup.find_all(True):
+        del tag['class']
+
+    # Ensure <code> never encapsulates <pre> tags
+    for code_tag in soup.find_all('code'):
+        if code_tag.find('pre'):
+            code_tag.unwrap()
+            
+    # Prettify the HTML content
+    prettified_html = soup.prettify()
+    
+    return prettified_html
 
 def setup_webdriver(download_location):
     """
@@ -188,7 +220,16 @@ def parse_song_links(driver):
         logging.error("Timeout occurred while waiting for song links.")
         return []
 
-def download_pdf(driver, song_url):
+def dumb_docx_space_fixer(text):
+    """
+    Removes the extra newline and 4 spaces that follow each line.
+
+    Args:
+        text (str): The text to be fixed.
+    """
+    return re.sub(r'\r\n\s{4}', '\n', text)
+
+def download_file(driver, song_url):
     """
     Downloads the song from the given URL and saves it as a PDF.
 
@@ -222,13 +263,48 @@ def download_pdf(driver, song_url):
         song_html = driver.find_element(By.XPATH, "/html/body/div[1]/div[3]/main/div[2]/article[1]/section[2]/article/div/section").get_attribute('innerHTML')
     
         # Concatenate song_title_element and song_html for the full download_html
-        download_html = song_title_element.get_attribute('outerHTML') + song_html        
-        # Convert HTML to PDF
-        pdfkit.from_string(download_html, f"{download_location}/{song_title}.pdf", configuration=pdfkitConfig, options=pdfkitOptions)
+        download_html = song_title_element.get_attribute('outerHTML') + song_html
         
-        logging.info(f"HTML downloaded for song: {song_title}")
+        if config.getboolean("Download", "docx"):
+            # Preprocess HTML by converting it to text with html2text
+            text_maker = html2text.HTML2Text()
+            text_maker.unicode_snob = True
+            text_maker.ignore_links = True
+            text_maker.single_line_break = True
+            
+            title_text = dumb_docx_space_fixer(text_maker.handle(preprocess_html(song_title_element.get_attribute('outerHTML'))))
+            body_text = dumb_docx_space_fixer(text_maker.handle(preprocess_html(song_html)))
+            doc = Document()
+            section = doc.add_section(WD_SECTION.CONTINUOUS)
+            section.left_margin = Inches(0.5)
+            section.right_margin = Inches(0.5)
+            section.top_margin = Inches(0.5)
+            section.bottom_margin = Inches(0.5)
+            header_obj = doc.add_heading(level=2)
+            header_obj.paragraph_format.left_indent = Inches(0)
+            header_obj.paragraph_format.right_indent = Inches(0)
+            header_obj.paragraph_format.line_spacing_rule = WD_LINE_SPACING.SINGLE
+            header = header_obj.add_run(title_text)
+            header.font.name = "Times New Roman"
+            header.font.color.rgb = RGBColor(0, 0, 0) # Black color
+            body_obj = doc.add_paragraph()
+            body_obj.paragraph_format.left_indent = Inches(0)
+            body_obj.paragraph_format.right_indent = Inches(0)
+            body_obj.paragraph_format.line_spacing_rule = WD_LINE_SPACING.SINGLE
+            body = body_obj.add_run(body_text)
+            body.font.name = "Courier New"
+            body.font.size = Pt(9.5)
+            
+            doc.save(f"{download_location}\\{song_title}.docx")
+            
+            logging.info(f"DOCX downloaded for song: {song_title}")
+        else:             
+            # Convert HTML to PDF
+            pdfkit.from_string(download_html, f"{download_location}\\{song_title}.pdf", configuration=pdfkitConfig, options=pdfkitOptions)
+            
+            logging.info(f"PDF downloaded for song: {song_title}")
     except (TimeoutException, NoSuchElementException) as e:
-        logging.error(f"Failed to download HTML for song: {driver.title.split(' | ')[0]}")
+        logging.error(f"Failed to download song: {driver.title.split(' | ')[0]}")
         logging.error(str(e))
         failed_songs.append(song_url)
         
@@ -247,7 +323,7 @@ def fetch_songs(driver):
     total_songs = len(song_urls)
     for index, song_url in enumerate(song_urls, start=1):
         logging.info(f"Processing song {index}/{total_songs}")
-        download_pdf(driver, song_url)
+        download_file(driver, song_url)
 
 if __name__ == "__main__":
     validate_config(config)
